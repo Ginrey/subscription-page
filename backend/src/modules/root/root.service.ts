@@ -61,7 +61,7 @@ export class RootService {
             let shortUuidLocal = shortUuid;
 
             if (this.isGenericPath(req.path)) {
-                res.socket?.destroy();
+                res.status(404).end();
                 return;
             }
 
@@ -84,13 +84,13 @@ export class RootService {
                             `Decoded Marzban username is not found in Remnawave, decoded username: ${sanitizedUsername}`,
                         );
 
-                        res.socket?.destroy();
+                        res.status(404).end();
                         return;
                     } else if (
                         this.mlDropRevokedSubscriptions &&
                         userInfo.response.response.subRevokedAt !== null
                     ) {
-                        res.socket?.destroy();
+                        res.status(404).end();
                         return;
                     }
 
@@ -98,7 +98,7 @@ export class RootService {
                 }
             }
 
-            if (userAgent && this.isBrowser(userAgent)) {
+            if (userAgent && this.isBrowser(userAgent, req.headers['accept'])) {
                 return this.returnWebpage(clientIp, req, res, shortUuidLocal);
             }
 
@@ -110,8 +110,13 @@ export class RootService {
                 clientType,
             );
 
-            if (!subscriptionDataResponse) {
-                res.socket?.destroy();
+            if (!subscriptionDataResponse || subscriptionDataResponse.notFound) {
+                res.status(404).end();
+                return;
+            }
+
+            if (subscriptionDataResponse.serviceError) {
+                res.status(503).end();
                 return;
             }
 
@@ -128,7 +133,9 @@ export class RootService {
         } catch (error) {
             this.logger.error('Error in serveSubscriptionPage', error);
 
-            res.socket?.destroy();
+            if (!res.headersSent) {
+                res.status(500).end();
+            }
             return;
         }
     }
@@ -145,8 +152,15 @@ export class RootService {
         );
     }
 
-    private isBrowser(userAgent: string): boolean {
-        const browserKeywords = [
+    private isBrowser(userAgent: string, acceptHeader?: string | string[]): boolean {
+        // Happ is a VPN client; even if its UA contains browser-like strings (e.g. Safari
+        // on iOS or Mozilla on Android WebView), it should always receive the raw subscription.
+        // Check anywhere in UA string, not just at start, to cover WebView-based builds.
+        if (/\bHapp\//i.test(userAgent)) {
+            return false;
+        }
+
+        const hasBrowserUA = [
             'Mozilla',
             'Chrome',
             'Safari',
@@ -155,9 +169,21 @@ export class RootService {
             'Edge',
             'TelegramBot',
             'WhatsApp',
-        ];
+        ].some((keyword) => userAgent.includes(keyword));
 
-        return browserKeywords.some((keyword) => userAgent.includes(keyword));
+        if (!hasBrowserUA) {
+            return false;
+        }
+
+        // VPN clients (xray, clash, sing-box, etc.) never request text/html.
+        // Browsers always include it in Accept. This prevents any VPN client whose UA
+        // accidentally contains browser keywords from landing on the HTML page.
+        const accept = Array.isArray(acceptHeader) ? acceptHeader.join(',') : acceptHeader ?? '';
+        if (accept && !accept.includes('text/html')) {
+            return false;
+        }
+
+        return true;
     }
 
     private isGenericPath(path: string): boolean {
@@ -190,7 +216,7 @@ export class RootService {
             );
 
             if (!subscriptionDataResponse.isOk || !subscriptionDataResponse.response) {
-                res.socket?.destroy();
+                res.status(503).end();
                 return;
             }
 
@@ -200,7 +226,7 @@ export class RootService {
             );
 
             if (!subpageConfigResponse.isOk || !subpageConfigResponse.response) {
-                res.socket?.destroy();
+                res.status(503).end();
                 return;
             }
 
@@ -208,7 +234,7 @@ export class RootService {
 
             if (subpageConfig.webpageAllowed === false) {
                 this.logger.log(`Webpage access is not allowed by Remnawave's SRR.`);
-                res.socket?.destroy();
+                res.status(403).end();
                 return;
             }
 
@@ -239,7 +265,9 @@ export class RootService {
         } catch (error) {
             this.logger.error(`Error in returnWebpage: ${error}`);
 
-            res.socket?.destroy();
+            if (!res.headersSent) {
+                res.status(500).end();
+            }
             return;
         }
     }

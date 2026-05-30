@@ -296,7 +296,9 @@ export class AxiosService implements OnModuleInit {
     ): Promise<{
         response: unknown;
         headers: RawAxiosResponseHeaders | AxiosResponseHeaders;
-    } | null> {
+        notFound?: never;
+        serviceError?: never;
+    } | { notFound: true; serviceError?: never } | { serviceError: true; notFound?: never } | null> {
         try {
             let basePath = 'api/sub/' + shortUuid;
 
@@ -327,10 +329,8 @@ export class AxiosService implements OnModuleInit {
             };
         } catch (error) {
             if (error instanceof AxiosError) {
-                if (error.response) {
-                    if (error.response.status === 404) {
-                        return null;
-                    }
+                if (error.response?.status === 404) {
+                    return { notFound: true };
                 }
 
                 this.logger.error(`Error in GetSubscription Request: ${error.message}`);
@@ -338,7 +338,7 @@ export class AxiosService implements OnModuleInit {
                 this.logger.error(`Error in GetSubscription Request: ${error}`);
             }
 
-            return null;
+            return { serviceError: true };
         }
     }
 }
