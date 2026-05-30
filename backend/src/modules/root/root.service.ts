@@ -22,6 +22,10 @@ export class RootService {
     private readonly isMarzbanLegacyLinkEnabled: boolean;
     private readonly marzbanSecretKeys: string[];
     private readonly mlDropRevokedSubscriptions: boolean;
+    private readonly happCryptoApiUrl = 'https://crypto.happ.su/api-v2.php';
+    private readonly happCryptoApiTimeoutMs = 10_000;
+    private readonly crypt5Cache = new Map<string, { link: string; expiresAt: number }>();
+    private readonly crypt5CacheTtlMs = 24 * 60 * 60 * 1_000;
     constructor(
         private readonly configService: ConfigService,
         private readonly jwtService: JwtService,
@@ -182,6 +186,7 @@ export class RootService {
             const subscriptionDataResponse = await this.axiosService.getSubscriptionInfo(
                 clientIp,
                 shortUuid,
+                req.headers,
             );
 
             if (!subscriptionDataResponse.isOk || !subscriptionDataResponse.response) {
@@ -213,6 +218,8 @@ export class RootService {
 
             const subscriptionData = subscriptionDataResponse.response;
 
+            await this.ensureHappCryptoLinks(subscriptionData.response);
+
             if (!baseSettings.showConnectionKeys) {
                 subscriptionData.response.links = [];
                 subscriptionData.response.ssConfLinks = {};
@@ -234,6 +241,78 @@ export class RootService {
 
             res.socket?.destroy();
             return;
+        }
+    }
+
+    private async ensureHappCryptoLinks(subscription: {
+        happCryptoLink?: string | null;
+        happCryptoLinkVersion?: 'crypt5' | null;
+        happCryptoLinks?: {
+            crypt4?: string | null;
+            crypt5?: string | null;
+        };
+        subscriptionUrl: string;
+    }): Promise<void> {
+        if (subscription.happCryptoLinks?.crypt5) {
+            return;
+        }
+
+        const crypt5Link = await this.createHappCrypt5Link(subscription.subscriptionUrl);
+
+        if (!crypt5Link) {
+            return;
+        }
+
+        subscription.happCryptoLinks = {
+            crypt4: subscription.happCryptoLinks?.crypt4 ?? null,
+            crypt5: crypt5Link,
+        };
+        subscription.happCryptoLink = crypt5Link;
+        subscription.happCryptoLinkVersion = 'crypt5';
+    }
+
+    private async createHappCrypt5Link(subscriptionUrl: string): Promise<string | null> {
+        const cached = this.crypt5Cache.get(subscriptionUrl);
+        if (cached && cached.expiresAt > Date.now()) {
+            return cached.link;
+        }
+
+        try {
+            const response = await fetch(this.happCryptoApiUrl, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                },
+                signal: AbortSignal.timeout(this.happCryptoApiTimeoutMs),
+                body: JSON.stringify({
+                    url: subscriptionUrl,
+                }),
+            });
+
+            if (!response.ok) {
+                this.logger.warn(`Happ crypt5 API responded with ${response.status}`);
+                return null;
+            }
+
+            const data = (await response.json()) as { encrypted_link?: unknown };
+
+            if (
+                typeof data.encrypted_link !== 'string' ||
+                !data.encrypted_link.startsWith('happ://crypt5/')
+            ) {
+                this.logger.warn('Happ crypt5 API returned an invalid encrypted link');
+                return null;
+            }
+
+            this.crypt5Cache.set(subscriptionUrl, {
+                link: data.encrypted_link,
+                expiresAt: Date.now() + this.crypt5CacheTtlMs,
+            });
+
+            return data.encrypted_link;
+        } catch (error) {
+            this.logger.warn(`Happ crypt5 API request failed: ${String(error)}`);
+            return null;
         }
     }
 

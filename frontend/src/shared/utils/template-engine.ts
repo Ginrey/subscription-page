@@ -32,7 +32,7 @@ export class TemplateEngine {
                 metaInfo.happCryptoLinks?.crypt4 ||
                 createHappCryptoLink(metaInfo.subscriptionUrl, 'v4', true) ||
                 'unknown',
-            HAPP_CRYPT5_LINK: () => metaInfo.happCryptoLinks?.crypt5 || 'unknown'
+            HAPP_CRYPT5_LINK: () => metaInfo.happCryptoLinks?.crypt5 || ''
         })
     }
 

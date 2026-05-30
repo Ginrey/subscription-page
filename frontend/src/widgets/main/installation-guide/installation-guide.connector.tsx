@@ -93,15 +93,11 @@ export const InstallationGuideConnector = (props: IProps) => {
     }
 
     const handleButtonClick = (button: TSubscriptionPageButtonConfig) => {
-        let formattedUrl: string | undefined
-
-        if (button.type === 'subscriptionLink' || button.type === 'copyButton') {
-            formattedUrl = TemplateEngine.formatWithMetaInfo(button.link, {
-                happCryptoLinks,
-                username: subscription.user.username,
-                subscriptionUrl
-            })
-        }
+        const formattedUrl = TemplateEngine.formatWithMetaInfo(button.link, {
+            happCryptoLinks,
+            username: subscription.user.username,
+            subscriptionUrl
+        })
 
         switch (button.type) {
             case 'copyButton': {
@@ -116,7 +112,9 @@ export const InstallationGuideConnector = (props: IProps) => {
                 break
             }
             case 'external': {
-                window.open(button.link, '_blank')
+                if (!formattedUrl) return
+
+                window.open(formattedUrl, '_blank')
                 break
             }
             case 'subscriptionLink': {

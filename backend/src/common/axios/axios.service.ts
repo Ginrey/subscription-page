@@ -231,13 +231,19 @@ export class AxiosService implements OnModuleInit {
     public async getSubscriptionInfo(
         clientIp: string,
         shortUuid: string,
+        headers: NodeJS.Dict<string | string[]>,
     ): Promise<ICommandResponse<GetSubscriptionInfoByShortUuidCommand.Response>> {
         try {
+            const safeHeaders = Object.fromEntries(
+                Object.entries(headers).filter(([key]) => !IGNORED_HEADERS.has(key.toLowerCase())),
+            );
+
             const response =
                 await this.axiosInstance.request<GetSubscriptionInfoByShortUuidCommand.Response>({
                     method: GetSubscriptionInfoByShortUuidCommand.endpointDetails.REQUEST_METHOD,
                     url: GetSubscriptionInfoByShortUuidCommand.url(shortUuid),
                     headers: {
+                        ...safeHeaders,
                         [REMNAWAVE_REAL_IP_HEADER]: clientIp,
                     },
                 });
