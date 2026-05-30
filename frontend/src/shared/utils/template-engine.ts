@@ -1,18 +1,27 @@
-import { TSubscriptionPageTemplateKey } from '@remnawave/subscription-page-types'
 import { createHappCryptoLink } from '@kastov/cryptohapp'
+import { TSubscriptionPageTemplateKey } from '@remnawave/subscription-page-types'
+
+type SupportedTemplateKey = TSubscriptionPageTemplateKey | 'HAPP_CRYPT5_LINK'
 
 type TemplateValues = {
-    [key in TSubscriptionPageTemplateKey]: number | string | undefined
+    [key in SupportedTemplateKey]: number | string | undefined
 }
 
 type LazyTemplateValues = {
-    [key in TSubscriptionPageTemplateKey]?: (() => string | undefined) | string | undefined
+    [key in SupportedTemplateKey]?: (() => string | undefined) | string | undefined
 }
 
 export class TemplateEngine {
     static formatWithMetaInfo(
         template: string,
-        metaInfo: { subscriptionUrl: string; username: string }
+        metaInfo: {
+            happCryptoLinks?: {
+                crypt4?: string | null
+                crypt5?: string | null
+            }
+            subscriptionUrl: string
+            username: string
+        }
     ): string {
         return this.replaceLazy(template, {
             USERNAME: metaInfo.username,
@@ -20,7 +29,10 @@ export class TemplateEngine {
             HAPP_CRYPT3_LINK: () =>
                 createHappCryptoLink(metaInfo.subscriptionUrl, 'v3', true) || 'unknown',
             HAPP_CRYPT4_LINK: () =>
-                createHappCryptoLink(metaInfo.subscriptionUrl, 'v4', true) || 'unknown'
+                metaInfo.happCryptoLinks?.crypt4 ||
+                createHappCryptoLink(metaInfo.subscriptionUrl, 'v4', true) ||
+                'unknown',
+            HAPP_CRYPT5_LINK: () => metaInfo.happCryptoLinks?.crypt5 || 'unknown'
         })
     }
 
@@ -28,7 +40,7 @@ export class TemplateEngine {
         let hasReplacement = false
         const result = template.replace(
             /\{\{(\w+)\}\}/g,
-            (match, key: TSubscriptionPageTemplateKey) => {
+            (match, key: SupportedTemplateKey) => {
                 if (values[key] !== undefined) {
                     hasReplacement = true
                     return values[key]?.toString() || ''
@@ -44,7 +56,7 @@ export class TemplateEngine {
         let hasReplacement = false
         const result = template.replace(
             /\{\{(\w+)\}\}/g,
-            (match, key: TSubscriptionPageTemplateKey) => {
+            (match, key: SupportedTemplateKey) => {
                 const value = lazyValues[key]
                 if (value !== undefined) {
                     const resolved = typeof value === 'function' ? value() : value

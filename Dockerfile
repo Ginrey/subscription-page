@@ -2,6 +2,7 @@ FROM node:24.14-trixie-slim AS backend-build
 WORKDIR /opt/app
 
 COPY backend/package*.json ./
+COPY backend/.npmrc ./
 COPY backend/tsconfig.json ./
 COPY backend/tsconfig.build.json ./
 
@@ -14,6 +15,21 @@ RUN npm run build
 RUN npm cache clean --force 
 
 RUN npm prune --omit=dev
+
+FROM node:24.14-trixie-slim AS frontend-build
+WORKDIR /opt/app
+
+COPY frontend/package*.json ./
+COPY frontend/.npmrc ./
+COPY frontend/tsconfig.json ./
+COPY frontend/tsconfig.node.json ./
+COPY frontend/vite.config.ts ./
+
+RUN npm ci
+
+COPY frontend/ .
+
+RUN npm run start:build
 
 FROM node:24.14-trixie-slim
 WORKDIR /opt/app
@@ -32,7 +48,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=backend-build /opt/app/dist ./dist
 COPY --from=backend-build /opt/app/node_modules ./node_modules
 
-COPY frontend/dist/ ./frontend/
+COPY --from=frontend-build /opt/app/dist ./frontend/
 
 COPY backend/package*.json ./
 

@@ -80,12 +80,24 @@ export const InstallationGuideConnector = (props: IProps) => {
         window.location.href,
         subscription.user.shortUuid
     )
+    const happCryptoData = subscription as {
+        happCryptoLink?: string | null
+        happCryptoLinks?: {
+            crypt4?: string | null
+            crypt5?: string | null
+        }
+    }
+    const happCryptoLinks = {
+        crypt4: happCryptoData.happCryptoLinks?.crypt4,
+        crypt5: happCryptoData.happCryptoLinks?.crypt5 ?? happCryptoData.happCryptoLink
+    }
 
     const handleButtonClick = (button: TSubscriptionPageButtonConfig) => {
         let formattedUrl: string | undefined
 
         if (button.type === 'subscriptionLink' || button.type === 'copyButton') {
             formattedUrl = TemplateEngine.formatWithMetaInfo(button.link, {
+                happCryptoLinks,
                 username: subscription.user.username,
                 subscriptionUrl
             })
